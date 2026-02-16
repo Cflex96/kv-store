@@ -19,8 +19,38 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 **What you build:**
 - An in-memory `map[string]string` protected by `RWMutex`
 - A TCP server that spawns one goroutine per client connection
-- A simple text protocol: `SET key value`, `GET key`, `DEL key`, `PING`
+- A length-prefixed + delimiter protocol (see Wire Protocol below)
 - Signal-based graceful shutdown (SIGINT/SIGTERM -> context cancel -> drain connections)
+
+**Wire Protocol:**
+
+Format: `<length>:<payload>\r\n`
+
+- `<length>` — byte count of `<payload>` (ASCII digits, max 64KB)
+- `:` — separator between length and payload
+- `<payload>` — the command (e.g. `SET foo bar`)
+- `\r\n` — terminator, acts as a framing integrity check
+
+Examples on the wire:
+```
+11:SET foo bar\r\n
+7:GET foo\r\n
+7:DEL foo\r\n
+4:PING\r\n
+```
+
+Parsing steps:
+1. Read until `:` — parse as integer (reject if negative or > 64KB)
+2. Read exactly N bytes — that's the payload
+3. Read 2 more bytes — verify they're `\r\n`
+4. If any step fails: close the connection (framing is lost, no recovery)
+
+Defenses:
+- **Max message size** (64KB) — prevents unbounded reads
+- **Read deadline** (e.g. 10s) — prevents stalled clients blocking a goroutine
+- **Close on framing error** — never attempt mid-stream recovery
+
+Response format follows the same `<length>:<payload>\r\n` framing.
 
 **Concurrency patterns unlocked:**
 - Goroutine-per-connection
@@ -29,14 +59,18 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 - WaitGroup for connection draining
 
 **Checklist:**
-- [ ] Initialize Go module (`go mod init go-kv-store`)
-- [ ] Create `store.go` — `Store` struct with `map[string]string` + `sync.RWMutex`
-- [ ] Implement `Get(key)`, `Set(key, value)`, `Del(key)` methods
-- [ ] Create `server.go` — TCP listener with `net.Listen("tcp", ":6379")`
-- [ ] Accept loop: `listener.Accept()` in a loop, spawn `go handleConn(conn)`
-- [ ] `handleConn`: use `bufio.Scanner` to read lines, parse commands, call store methods
-- [ ] Protocol parsing: split line by spaces, dispatch to GET/SET/DEL/PING
-- [ ] Response format: `+OK`, `$value`, `-ERR message`, `+PONG`
+- [x] Initialize Go module (`go mod init go-kv-store`)
+- [x] Create `store.go` — `Store` struct with `map[string]string` + `sync.RWMutex`
+- [x] Implement `Get(key)`, `Set(key, value)`, `Del(key)` methods
+- [x] Create `server.go` — TCP listener with `net.Listen("tcp", ":6379")`
+- [x] Accept loop: `listener.Accept()` in a loop, spawn `go handleConn(conn)`
+- [x] Create `protocol.go` — `readMessage(reader *bufio.Reader) (string, error)` using length-prefix + delimiter framing
+- [x] `readMessage`: read until `:` for length, `io.ReadFull` for payload, verify trailing `\r\n`
+- [x] `writeMessage(writer *bufio.Writer, payload string)` — write `<len>:<payload>\r\n` and flush
+- [x] Enforce max message size (64KB) and read deadline (10s) — close connection on violation
+- [ ] `handleConn`: loop calling `readMessage`, parse commands, call store methods
+- [ ] Protocol parsing: split payload by spaces, dispatch to GET/SET/DEL/PING
+- [ ] Response payloads: `OK`, `<value>`, `ERR <message>`, `PONG`
 - [ ] Add `context.Context` — create with `signal.NotifyContext(ctx, SIGINT, SIGTERM)`
 - [ ] Pass context to accept loop — break on `ctx.Done()`
 - [ ] Add `sync.WaitGroup` — `wg.Add(1)` per connection, `wg.Done()` when handler exits
@@ -52,7 +86,55 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 
 ---
 
-## Stage 2: Background Workers — TTL & Expiration
+## Stage 2: Data Modeling — Value Types
+
+**Goal:** The store supports multiple value types — strings, lists, and hashes — with type-safe command dispatch.
+
+**Concepts to learn first:**
+- Go interfaces and type assertions — modeling polymorphic values
+- Tagged unions via interface + concrete types (the `Value` interface pattern)
+- Type switches for dispatch (`switch v := val.(type)`)
+- Designing for extensibility: adding a new type should require minimal changes
+
+**What you build:**
+- A `Value` interface with concrete types: `StringValue`, `ListValue`, `HashValue`
+- Refactor store from `map[string]string` to `map[string]Value`
+- Type-checking at command dispatch: `LPUSH` on a string key returns `WRONGTYPE`
+- String commands: `SET`, `GET` (already exist — wire through `StringValue`)
+- List commands: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LLEN`
+- Hash commands: `HSET`, `HGET`, `HDEL`, `HGETALL`
+
+**Concurrency patterns unlocked:**
+- This is a data modeling stage, not a concurrency stage — but it makes every subsequent stage richer (TTL across types, WAL serialization per type, transactions mixing types)
+
+**Checklist:**
+- [ ] Define `Value` interface in `types.go`: `Type() string` method (returns `"string"`, `"list"`, `"hash"`)
+- [ ] Implement `StringValue` — wraps a `string`
+- [ ] Implement `ListValue` — wraps a `[]string`
+- [ ] Implement `HashValue` — wraps a `map[string]string`
+- [ ] Refactor `Store` from `map[string]string` to `map[string]Value`
+- [ ] Refactor `Set()`/`Get()` — create/read `StringValue`, type-assert on `Get()`
+- [ ] Add type guard helper: before executing a type-specific command, check `val.Type()` — return `-WRONGTYPE Operation against a key holding the wrong kind of value` on mismatch
+- [ ] Implement `LPush(key string, values ...string)` — create `ListValue` if key doesn't exist, prepend values
+- [ ] Implement `RPush(key string, values ...string)` — append values
+- [ ] Implement `LPop(key string)` / `RPop(key string)` — remove and return from head/tail
+- [ ] Implement `LRange(key string, start, stop int)` — return slice (support negative indexes)
+- [ ] Implement `LLen(key string)` — return list length
+- [ ] Implement `HSet(key, field, value string)` — create `HashValue` if key doesn't exist
+- [ ] Implement `HGet(key, field string)` — return field value
+- [ ] Implement `HDel(key, field string)` — remove field
+- [ ] Implement `HGetAll(key string)` — return all field-value pairs
+- [ ] Extend protocol parser to handle new commands
+- [ ] Auto-delete: if `LPop`/`RPop` empties a list or `HDel` removes the last field, delete the key entirely (Redis behavior)
+- [ ] Test: SET then LPUSH on same key returns WRONGTYPE
+- [ ] Test: LPUSH/RPUSH/LRANGE with positive and negative indexes
+- [ ] Test: HSET/HGET/HDEL/HGETALL round-trip
+- [ ] Test: empty list/hash auto-deletion
+- [ ] Run `go test -race ./...`
+
+---
+
+## Stage 3: Background Workers — TTL & Expiration
 
 **Goal:** Keys can expire after a time-to-live. A background goroutine cleans them up.
 
@@ -73,7 +155,7 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 - Coordinating background work with shared mutable state
 
 **Checklist:**
-- [ ] Change store value type: `map[string]string` -> `map[string]entry` where `entry{value string, expiresAt time.Time}`
+- [ ] Wrap store values: `map[string]Value` -> `map[string]entry` where `entry{value Value, expiresAt time.Time}`
 - [ ] Update `Set()` to accept optional TTL: `Set(key, value string, ttl time.Duration)`
 - [ ] Parse `SET key value EX seconds` in command handler — convert seconds to `time.Duration`
 - [ ] Lazy expiration: in `Get()`, check `expiresAt`; if expired, delete key and return not-found
@@ -87,7 +169,7 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 
 ---
 
-## Stage 3: Durability — Write-Ahead Log
+## Stage 4: Durability — Write-Ahead Log
 
 **Goal:** Data survives restarts. Every mutation is logged to disk before being applied.
 
@@ -105,12 +187,12 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 **Concurrency patterns unlocked:**
 - Critical sections that include I/O (the lock spans both disk write and map update)
 - Understanding the tension between holding locks and doing slow operations
-- This motivates Stage 4's optimization
+- Transactions (Stage 5) will compound this tension — batching (Stage 6) will resolve it
 
 **Checklist:**
 - [ ] Create `wal.go` — `WAL` struct wrapping an `*os.File`
 - [ ] `OpenWAL(path string)` — open file with `O_CREATE|O_RDWR|O_APPEND`
-- [ ] WAL line format: `SET key value [EX seconds]\n` or `DEL key\n`
+- [ ] WAL line format: type-aware — `SET key value [EX seconds]\n`, `DEL key\n`, `LPUSH key value\n`, `HSET key field value\n`, etc.
 - [ ] `wal.Append(op string)` — write line + `file.Sync()` (fsync)
 - [ ] `wal.Replay() []Operation` — read file line by line, parse back into operations
 - [ ] On server startup: open WAL, replay entries into store (call `store.Set`/`store.Del`)
@@ -123,7 +205,52 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 
 ---
 
-## Stage 4: Performance — Pipelining & Batching
+## Stage 5: Atomicity — Transactions
+
+**Goal:** Clients can group multiple commands into an atomic block that executes without interleaving from other clients.
+
+**Concepts to learn first:**
+- Per-connection state machines — a connection transitions between modes based on commands
+- Optimistic concurrency control: defer locking until the moment of execution
+- Atomic WAL writes: a group of operations must be logged as a single unit or not at all
+- How Redis MULTI/EXEC works (command queuing, not locking)
+
+**What you build:**
+- `MULTI` — enters transaction mode, subsequent commands are queued instead of executed
+- `EXEC` — executes all queued commands atomically (acquire lock once, apply all, single WAL entry)
+- `DISCARD` — throws away the queued commands, exits transaction mode
+- Per-connection command queue stored in the connection handler's local state (no shared state for queuing)
+- Atomic WAL write: all commands in a transaction are written as a single WAL block
+
+**Concurrency patterns unlocked:**
+- Per-connection state machine (normal mode ↔ transaction mode)
+- Optimistic concurrency: no lock held during MULTI..queuing, lock acquired only at EXEC
+- Atomic compound operations: executing N commands under a single lock acquisition
+- The tension between atomicity and lock duration (EXEC holds the lock for N operations — this motivates Stage 6's batching)
+
+**Checklist:**
+- [ ] Create `transaction.go` — `Transaction` struct with `queued []Command` slice
+- [ ] `Transaction` is per-connection state — stored in `handleConn`, not shared
+- [ ] Parse `MULTI` — create a new `Transaction`, switch connection to queuing mode
+- [ ] In queuing mode: commands are appended to `queued` instead of executed; respond with `+QUEUED`
+- [ ] Parse `EXEC` — acquire store lock once, execute all queued commands in order, release lock
+- [ ] Collect responses: each queued command produces a response, EXEC returns all of them as an array
+- [ ] Response format for EXEC: `*N` followed by N individual responses (one per queued command)
+- [ ] Atomic WAL write: write all transaction commands as a single WAL block (e.g., `BEGIN\n...commands...\nEND\n`)
+- [ ] WAL replay: handle transaction blocks — apply all commands in a block, skip incomplete blocks (crash recovery)
+- [ ] Parse `DISCARD` — clear the command queue, exit transaction mode, respond `+OK`
+- [ ] Error handling: if MULTI is called inside MULTI, respond `-ERR MULTI calls can not be nested`
+- [ ] Error handling: if EXEC/DISCARD is called without MULTI, respond `-ERR EXEC without MULTI` / `-ERR DISCARD without MULTI`
+- [ ] Error within transaction: if a queued command fails at EXEC time, continue executing remaining commands (Redis behavior — no rollback)
+- [ ] Test: MULTI, SET a, SET b, EXEC — both keys exist atomically
+- [ ] Test: MULTI, DISCARD — no changes applied
+- [ ] Test: concurrent transactions from two clients — verify no interleaving
+- [ ] Test: crash recovery — incomplete transaction block in WAL is skipped on replay
+- [ ] Run `go test -race ./...`
+
+---
+
+## Stage 6: Performance — Pipelining & Batching
 
 **Goal:** Reduce lock contention and disk I/O by batching operations.
 
@@ -137,6 +264,7 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 - A write-batch channel: mutations are sent to a channel, a single goroutine drains it in batches
 - The batch goroutine acquires the lock once per batch, applies all ops, writes one WAL entry
 - Client-side pipelining: read all available commands, execute as batch, write all responses, flush
+- Transactions from Stage 5 flow through the batcher: EXEC submits the entire transaction as a single batch entry
 
 **Concurrency patterns unlocked:**
 - Buffered channel as a work queue
@@ -155,14 +283,16 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 - [ ] Modify `store.Set()`/`store.Del()` — send to `writeCh`, block on result channel
 - [ ] Client pipelining: wrap conn in `bufio.Writer`, buffer responses, `Flush()` after processing all available commands
 - [ ] Read commands in `handleConn`: use `scanner.Scan()` in a loop, collect commands while data is available
+- [ ] Wire transactions through batcher: EXEC sends all queued commands as a single `WriteOp` batch
 - [ ] Test: concurrent writers, verify all ops applied correctly
+- [ ] Test: transaction via batcher — MULTI/SET/SET/EXEC still atomic under concurrent load
 - [ ] Benchmark: compare throughput vs Stage 3 (should see improvement)
 - [ ] Load test: N goroutines doing SET in parallel, measure ops/sec
 - [ ] Run `go test -race ./...`
 
 ---
 
-## Stage 5: Pub/Sub — Fan-Out & Select
+## Stage 7: Pub/Sub — Fan-Out & Select
 
 **Goal:** Clients can subscribe to channels and receive messages in real-time.
 
@@ -204,7 +334,7 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 
 ---
 
-## Stage 6: Distribution — Replication
+## Stage 8: Distribution — Replication
 
 **Goal:** One leader server replicates writes to follower servers in real-time.
 
@@ -255,15 +385,19 @@ A progressive curriculum for building a Redis-like KV store in Go, organized by 
 go-kv-store/
 ├── main.go           # CLI flags, wiring, signal handling
 ├── store.go          # In-memory store with RWMutex
+├── types.go          # Value types (String, List, Hash) and type dispatch
 ├── server.go         # TCP server, accept loop, connection handler
 ├── protocol.go       # Command parsing and response formatting
 ├── wal.go            # Write-ahead log (append, replay, sync)
+├── transaction.go    # Transaction state and MULTI/EXEC logic
 ├── batcher.go        # Write batching goroutine
 ├── pubsub.go         # Pub/Sub manager
 ├── replication.go    # Leader/follower replication
 ├── store_test.go     # Store unit tests
+├── types_test.go     # Value type tests
 ├── server_test.go    # Integration tests (TCP client tests)
 ├── wal_test.go       # WAL tests
+├── transaction_test.go # Transaction tests
 ├── batcher_test.go   # Batcher tests
 ├── pubsub_test.go    # Pub/Sub tests
 ├── replication_test.go # Replication tests
@@ -274,11 +408,13 @@ go-kv-store/
 ## Suggested Order of Attack
 
 1. **Stage 1** — Get `store.go` + `server.go` + `protocol.go` + `main.go` working first
-2. **Stage 2** — Modify `store.go` to add TTL, add sweeper
-3. **Stage 3** — Add `wal.go`, wire into store mutations
-4. **Stage 4** — Add `batcher.go`, refactor store writes to go through channel
-5. **Stage 5** — Add `pubsub.go`, extend protocol and connection handler
-6. **Stage 6** — Add `replication.go`, add CLI flags to `main.go`
+2. **Stage 2** — Add `types.go`, refactor store to support multiple value types
+3. **Stage 3** — Modify `store.go` to add TTL, add sweeper
+4. **Stage 4** — Add `wal.go`, wire into store mutations
+5. **Stage 5** — Add `transaction.go`, extend protocol for MULTI/EXEC/DISCARD
+6. **Stage 6** — Add `batcher.go`, refactor store writes to go through channel
+7. **Stage 7** — Add `pubsub.go`, extend protocol and connection handler
+8. **Stage 8** — Add `replication.go`, add CLI flags to `main.go`
 
 ## Quick Reference — Testing Commands
 
@@ -289,14 +425,10 @@ go test -race ./...
 # Run benchmarks
 go test -bench=. -benchmem ./...
 
-# Manual testing with netcat
-echo "PING" | nc localhost 6379
-echo "SET foo bar" | nc localhost 6379
-echo "GET foo" | nc localhost 6379
-
-# Interactive netcat session
-nc localhost 6379
-# then type commands one per line
+# Manual testing with netcat (length-prefixed protocol)
+printf '4:PING\r\n' | nc localhost 6379
+printf '11:SET foo bar\r\n' | nc localhost 6379
+printf '7:GET foo\r\n' | nc localhost 6379
 
 # Count goroutines (in test code)
 before := runtime.NumGoroutine()
