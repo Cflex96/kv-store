@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"net"
 	"testing"
 
@@ -42,9 +43,11 @@ func TestDecodeMessage(t *testing.T) {
 
 			go func() {
 				client.Write([]byte(test.input))
+				client.Close()
 			}()
 
-			resp, err := decodeMessage(server, 500)
+			rd := bufio.NewReader(server)
+			resp, err := decodeMessage(rd)
 			if test.isError {
 				assert.Error(t, err)
 			} else {

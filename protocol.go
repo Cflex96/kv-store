@@ -4,30 +4,31 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"net"
 	"strconv"
-	"time"
 )
 
 // 64kB
 const maxMessageSize int = 16000
 
-func decodeMessage(conn net.Conn, timeout int) (string, error) {
-	conn.SetReadDeadline(time.Now().Add(time.Duration(timeout) * time.Millisecond))
+var (
+	ErrMissingHeader = errors.New("missing header")
+	ErrInvalidHeader = errors.New("invalid header")
+	ErrMessageTooBig = errors.New("message too big")
+	ErrCorruptMsg    = errors.New("corrupt message")
+)
 
-	rd := bufio.NewReader(conn)
-
+func decodeMessage(rd *bufio.Reader) (string, error) {
 	header, err := rd.ReadString(':')
 	if err != nil {
-		return "", fmt.Errorf("error reading message with error: %s", err)
+		return "", fmt.Errorf("%w: %w", ErrMissingHeader, err)
 	}
 
 	messageSize, err := strconv.Atoi(header[:len(header)-1])
 	if err != nil {
-		return "", fmt.Errorf("invalid Header; could not convert to int: %s", err)
+		return "", fmt.Errorf("%w: could not parse %q as int", ErrInvalidHeader, header[:len(header)-1])
 	}
 	if messageSize > maxMessageSize {
-		return "", errors.New("body may not exceed 64kB")
+		return "", fmt.Errorf("%w: %d bytes exceeds %d limit", ErrMessageTooBig, messageSize, maxMessageSize)
 	}
 
 	// +2 to account for "\r\n"
@@ -35,7 +36,7 @@ func decodeMessage(conn net.Conn, timeout int) (string, error) {
 	rd.Read(buffer)
 
 	if string(buffer[messageSize:]) != "\r\n" {
-		return "", errors.New("message possibly corrupt, could not detect \\r\\n'")
+		return "", fmt.Errorf("%w: missing \\r\\n delimiter", ErrCorruptMsg)
 	}
 
 	return string(buffer[:len(buffer)-2]), nil

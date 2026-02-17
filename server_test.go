@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"net"
 	"testing"
 
@@ -15,14 +17,19 @@ func TestHandleConection(t *testing.T) {
 		description string
 	}{
 		{
-			"SET",
-			"OK",
-			"Valid Predicate",
+			encodeMessageToString("SET"),
+			ErrWrongArgs,
+			"Invalid command",
 		},
 		{
-			"DED",
-			"ERROR_INVALID_CMD",
+			encodeMessageToString("DED"),
+			ErrInvalidCmd,
 			"Invalid predicate",
+		},
+		{
+			encodeMessageToString("SET chris 26"),
+			"OK",
+			"Valid Set command",
 		},
 	}
 
@@ -32,15 +39,72 @@ func TestHandleConection(t *testing.T) {
 			defer server.Close()
 			defer client.Close()
 
-			go handleConnection(server)
+			store := New()
 
-			msg := encodeMessage(test.input)
-			client.Write(msg)
+			go func() {
+				client.Write([]byte(test.input))
+			}()
 
-			resp, err := decodeMessage(client, 200)
+			go handleConnection(server, store)
+
+			rd := bufio.NewReader(client)
+			resp, err := decodeMessage(rd)
 			require.NoError(t, err)
 
-			assert.Equal(t, test.output, resp, test.description)
+			assert.Contains(t, resp, test.output, test.description)
 		})
+	}
+
+	t.Run("Test Commands mutate map", func(t *testing.T) {
+		key := "testK"
+		val := "testV"
+		store := New()
+
+		t.Run("Test Set in storage", func(t *testing.T) {
+			msg, err := arrangeAndActOnMapMutationTest(fmt.Sprintf("SET %s %s", key, val), store)
+
+			assert.NoError(t, err)
+			assert.Equal(t, SuccessMsg, msg)
+			assert.Equal(t, val, store.Get(key))
+		})
+
+		t.Run("Test Get from storage", func(t *testing.T) {
+			msg2, err := arrangeAndActOnMapMutationTest(fmt.Sprintf("GET %s", key), store)
+
+			assert.NoError(t, err)
+			assert.Equal(t, val, msg2)
+		})
+
+		t.Run("test delete from storage", func(t *testing.T) {
+			msg3, err := arrangeAndActOnMapMutationTest(fmt.Sprintf("DEL %s", key), store)
+
+			assert.NoError(t, err)
+			assert.Equal(t, "", msg3)
+		})
+	})
+}
+
+func encodeMessageToString(msg string) string {
+	ln := len(msg)
+
+	formattedMsg := fmt.Sprintf("%d:%s\r\n", ln, msg)
+	return formattedMsg
+}
+
+func arrangeAndActOnMapMutationTest(msg string, store *MemoryStore) (string, error) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	rd := bufio.NewReader(client)
+	go func() {
+		client.Write(encodeMessage(msg))
+	}()
+
+	go handleConnection(server, store)
+	if msg, err := decodeMessage(rd); err != nil {
+		return "", err
+	} else {
+		return msg, nil
 	}
 }
