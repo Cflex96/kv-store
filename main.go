@@ -1,5 +1,12 @@
 package main
 
+import (
+	"context"
+	"os"
+)
+
 func main() {
-	RunTCPServer()
+	ctx := context.Background()
+	code := RunTCPServer(ctx)
+	os.Exit(code)
 }

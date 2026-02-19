@@ -14,6 +14,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRunTCPServer(t *testing.T) {
+	t.Run("Test SIGTERM", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		c := make(chan int)
+		go func(c chan int) {
+			code := RunTCPServer(ctx)
+			c <- code
+		}(c)
+
+		// give server time to startup
+		time.Sleep(time.Second)
+		cancel()
+
+		select {
+		case code := <-c:
+			assert.Equal(t, 0, code)
+		case <-time.After(5 * time.Second):
+			t.Fatal("server did not shut down in time")
+		}
+	})
+}
+
 func TestHandleConnection(t *testing.T) {
 	tests := []struct {
 		input       string

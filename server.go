@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -30,29 +33,46 @@ const SuccessMsg string = "OK"
 
 const TCPConnectionIdleTimeout = 200
 
-func RunTCPServer() {
+func RunTCPServer(ctx context.Context) int {
 	store := New()
+
+	serverCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	listener, err := net.Listen("tcp", "localhost:6379")
 	if err != nil {
 		log.Fatalf("Failed to Start Server: %s", err.Error())
-		return
+		return 1
 	}
 	defer listener.Close()
 
+	go func() {
+		<-serverCtx.Done()
+		listener.Close()
+	}()
+
+	var wg sync.WaitGroup
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if serverCtx.Err() != nil {
+				break
+			}
 			log.Println("Error accepting conn:", err)
 			continue
 		}
+		connCtx, cancel := context.WithTimeout(serverCtx, time.Minute*5)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		wg.Add(1)
 
 		go func() {
 			defer cancel()
-			go handleConnection(ctx, conn, store)
+			defer wg.Done()
+			handleConnection(connCtx, conn, store)
 		}()
 	}
+	wg.Wait()
+	return 0
 }
 
 func handleConnection(ctx context.Context, conn net.Conn, store *MemoryStore) {

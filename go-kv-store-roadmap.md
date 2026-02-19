@@ -72,10 +72,10 @@ Response format follows the same `<length>:<payload>\r\n` framing.
 - [x] Protocol parsing: split payload by spaces, dispatch to GET/SET/DEL/PING
 - [x] Response payloads: `OK`, `<value>`, `ERR <message>`, `PONG`
 - [x] Client closing connection is properly handled using io.EOF
-- [ ] Add `context.Context` — create with `signal.NotifyContext(ctx, SIGINT, SIGTERM)`
+- [x] Add `context.Context` — create with `signal.NotifyContext(ctx, SIGINT, SIGTERM)`
 - [x] Pass context to accept loop — break on `ctx.Done()`
-- [ ] Add `sync.WaitGroup` — `wg.Add(1)` per connection, `wg.Done()` when handler exits
-- [ ] On shutdown: cancel context, close listener, `wg.Wait()` for in-flight connections
+- [x] Add `sync.WaitGroup` — `wg.Add(1)` per connection, `wg.Done()` when handler exits
+- [x] On shutdown: cancel context, close listener, `wg.Wait()` for in-flight connections
 - [ ] Write tests: concurrent GET/SET from multiple goroutines
 - [ ] Run `go test -race ./...` — fix any races
 - [ ] Manual test: open 2+ `netcat` sessions, SET/GET concurrently, Ctrl+C server
