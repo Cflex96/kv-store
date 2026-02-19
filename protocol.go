@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 )
 
@@ -20,15 +21,28 @@ var (
 func decodeMessage(rd *bufio.Reader) (string, error) {
 	header, err := rd.ReadString(':')
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrMissingHeader, err)
+		if errors.Is(err, io.EOF) {
+			return "", io.EOF
+		} else {
+			return "", fmt.Errorf("%w: %w", ErrMissingHeader, err)
+		}
 	}
 
 	messageSize, err := strconv.Atoi(header[:len(header)-1])
 	if err != nil {
-		return "", fmt.Errorf("%w: could not parse %q as int", ErrInvalidHeader, header[:len(header)-1])
+		return "", fmt.Errorf(
+			"%w: could not parse %q as int",
+			ErrInvalidHeader,
+			header[:len(header)-1],
+		)
 	}
 	if messageSize > maxMessageSize {
-		return "", fmt.Errorf("%w: %d bytes exceeds %d limit", ErrMessageTooBig, messageSize, maxMessageSize)
+		return "", fmt.Errorf(
+			"%w: %d bytes exceeds %d limit",
+			ErrMessageTooBig,
+			messageSize,
+			maxMessageSize,
+		)
 	}
 
 	// +2 to account for "\r\n"

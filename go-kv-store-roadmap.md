@@ -68,11 +68,12 @@ Response format follows the same `<length>:<payload>\r\n` framing.
 - [x] `readMessage`: read until `:` for length, `io.ReadFull` for payload, verify trailing `\r\n`
 - [x] `writeMessage(writer *bufio.Writer, payload string)` — write `<len>:<payload>\r\n` and flush
 - [x] Enforce max message size (64KB) and read deadline (10s) — close connection on violation
-- [ ] `handleConn`: loop calling `readMessage`, parse commands, call store methods
-- [ ] Protocol parsing: split payload by spaces, dispatch to GET/SET/DEL/PING
-- [ ] Response payloads: `OK`, `<value>`, `ERR <message>`, `PONG`
+- [x] `handleConn`: loop calling `readMessage`, parse commands, call store methods
+- [x] Protocol parsing: split payload by spaces, dispatch to GET/SET/DEL/PING
+- [x] Response payloads: `OK`, `<value>`, `ERR <message>`, `PONG`
+- [x] Client closing connection is properly handled using io.EOF
 - [ ] Add `context.Context` — create with `signal.NotifyContext(ctx, SIGINT, SIGTERM)`
-- [ ] Pass context to accept loop — break on `ctx.Done()`
+- [x] Pass context to accept loop — break on `ctx.Done()`
 - [ ] Add `sync.WaitGroup` — `wg.Add(1)` per connection, `wg.Done()` when handler exits
 - [ ] On shutdown: cancel context, close listener, `wg.Wait()` for in-flight connections
 - [ ] Write tests: concurrent GET/SET from multiple goroutines

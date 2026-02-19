@@ -2,15 +2,19 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"net"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandleConection(t *testing.T) {
+func TestHandleConnection(t *testing.T) {
 	tests := []struct {
 		input       string
 		output      string
@@ -37,23 +41,52 @@ func TestHandleConection(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			server, client := net.Pipe()
 			defer server.Close()
-			defer client.Close()
 
 			store := New()
 
-			go func() {
-				client.Write([]byte(test.input))
-			}()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			defer cancel()
 
-			go handleConnection(server, store)
+			go handleConnection(ctx, server, store)
+
+			client.Write([]byte(test.input))
 
 			rd := bufio.NewReader(client)
 			resp, err := decodeMessage(rd)
 			require.NoError(t, err)
 
 			assert.Contains(t, resp, test.output, test.description)
+
+			client.Close()
 		})
 	}
+}
+
+func TestHandleMessage(t *testing.T) {
+	t.Run("same connection handles multiple messages", func(t *testing.T) {
+		store := New()
+		server, client := net.Pipe()
+		defer server.Close()
+		defer client.Close()
+
+		serverReader := bufio.NewReader(server)
+		clientReader := bufio.NewReader(client)
+
+		results := make([]string, 5)
+
+		for i := range 5 {
+			go client.Write(encodeMessage("PING"))
+
+			go handleMessage(server, serverReader, store)
+			res, err := decodeMessage(clientReader)
+			assert.NoError(t, err)
+			results[i] = res
+		}
+
+		for _, v := range slices.All(results) {
+			assert.Equal(t, v, "PONG")
+		}
+	})
 
 	t.Run("Test Commands mutate map", func(t *testing.T) {
 		key := "testK"
@@ -82,6 +115,19 @@ func TestHandleConection(t *testing.T) {
 			assert.Equal(t, "", msg3)
 		})
 	})
+
+	t.Run("Handles EOF Client closes Reader", func(t *testing.T) {
+		server, client := net.Pipe()
+		defer server.Close()
+
+		store := New()
+
+		rd := bufio.NewReader(server)
+
+		client.Close()
+		err := handleMessage(server, rd, store)
+		assert.ErrorIs(t, err, io.EOF)
+	})
 }
 
 func encodeMessageToString(msg string) string {
@@ -96,13 +142,14 @@ func arrangeAndActOnMapMutationTest(msg string, store *MemoryStore) (string, err
 	defer server.Close()
 	defer client.Close()
 
-	rd := bufio.NewReader(client)
-	go func() {
-		client.Write(encodeMessage(msg))
-	}()
+	serverRd := bufio.NewReader(server)
+	clientRd := bufio.NewReader(client)
 
-	go handleConnection(server, store)
-	if msg, err := decodeMessage(rd); err != nil {
+	go client.Write(encodeMessage(msg))
+
+	go handleMessage(server, serverRd, store)
+
+	if msg, err := decodeMessage(clientRd); err != nil {
 		return "", err
 	} else {
 		return msg, nil
