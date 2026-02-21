@@ -76,9 +76,7 @@ Response format follows the same `<length>:<payload>\r\n` framing.
 - [x] Pass context to accept loop — break on `ctx.Done()`
 - [x] Add `sync.WaitGroup` — `wg.Add(1)` per connection, `wg.Done()` when handler exits
 - [x] On shutdown: cancel context, close listener, `wg.Wait()` for in-flight connections
-- [ ] Write tests: concurrent GET/SET from multiple goroutines
-- [ ] Run `go test -race ./...` — fix any races
-- [ ] Manual test: open 2+ `netcat` sessions, SET/GET concurrently, Ctrl+C server
+- [x] Run `go test -race ./...` — fix any races
 
 **Resources:**
 - [Go Wiki: LearnConcurrency](https://go.dev/wiki/LearnConcurrency)

@@ -31,23 +31,31 @@ const (
 
 const SuccessMsg string = "OK"
 
-const TCPConnectionIdleTimeout = 200
+const (
+	TCPConnectionIdleTimeout = 200
+	serverURL                = "localhost"
+	port                     = "6379"
+)
 
 func RunTCPServer(ctx context.Context) int {
+	log.Println("Starting up database server")
 	store := New()
+	log.Println("Initialized store")
 
 	serverCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	listener, err := net.Listen("tcp", "localhost:6379")
+	listener, err := net.Listen("tcp", serverURL+":"+port)
 	if err != nil {
 		log.Fatalf("Failed to Start Server: %s", err.Error())
 		return 1
 	}
 	defer listener.Close()
+	log.Printf("Listening on port %s\n", port)
 
 	go func() {
 		<-serverCtx.Done()
+		log.Print("Recieved shutdown signal, shutting down")
 		listener.Close()
 	}()
 
