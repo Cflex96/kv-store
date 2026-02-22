@@ -121,7 +121,7 @@ func TestHandleMessage(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, SuccessMsg, msg)
-			assert.Equal(t, val, store.Get(key))
+			assert.Equal(t, val, store.Get(key).String())
 		})
 
 		t.Run("Test Get from storage", func(t *testing.T) {

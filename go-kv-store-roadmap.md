@@ -107,12 +107,12 @@ Response format follows the same `<length>:<payload>\r\n` framing.
 - This is a data modeling stage, not a concurrency stage — but it makes every subsequent stage richer (TTL across types, WAL serialization per type, transactions mixing types)
 
 **Checklist:**
-- [ ] Define `Value` interface in `types.go`: `Type() string` method (returns `"string"`, `"list"`, `"hash"`)
-- [ ] Implement `StringValue` — wraps a `string`
-- [ ] Implement `ListValue` — wraps a `[]string`
-- [ ] Implement `HashValue` — wraps a `map[string]string`
-- [ ] Refactor `Store` from `map[string]string` to `map[string]Value`
-- [ ] Refactor `Set()`/`Get()` — create/read `StringValue`, type-assert on `Get()`
+- [x] Define `Value` interface in `types.go`: `Type() string` method (returns `"string"`, `"list"`, `"hash"`)
+- [x] Implement `StringValue` — wraps a `string`
+- [x] Implement `ListValue` — wraps a `[]string`
+- [x] Implement `HashValue` — wraps a `map[string]string`
+- [x] Refactor `Store` from `map[string]string` to `map[string]Value`
+- [x] Refactor `Set()`/`Get()` — create/read `StringValue`
 - [ ] Add type guard helper: before executing a type-specific command, check `val.Type()` — return `-WRONGTYPE Operation against a key holding the wrong kind of value` on mismatch
 - [ ] Implement `LPush(key string, values ...string)` — create `ListValue` if key doesn't exist, prepend values
 - [ ] Implement `RPush(key string, values ...string)` — append values

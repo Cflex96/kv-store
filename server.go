@@ -127,7 +127,7 @@ func handleMessage(conn net.Conn, rd *bufio.Reader, store *MemoryStore) error {
 			return err
 		}
 		result := store.Get(args[0])
-		_, err = conn.Write(encodeMessage(result))
+		_, err = conn.Write(encodeMessage(result.String()))
 		if err != nil {
 			log.Printf("Server write error: %v", err)
 			return err
@@ -142,7 +142,11 @@ func handleMessage(conn net.Conn, rd *bufio.Reader, store *MemoryStore) error {
 			)
 			return err
 		}
-		store.Set(args[0], args[1])
+
+		store.Set(args[0], &StringValue{
+			Value: args[1],
+		})
+
 		_, err = conn.Write(encodeMessage(SuccessMsg))
 		if err != nil {
 			log.Printf("Server write error: %v", err)
