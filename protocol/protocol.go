@@ -1,4 +1,4 @@
-package main
+package protocol
 
 import (
 	"bufio"
@@ -18,7 +18,7 @@ var (
 	ErrCorruptMsg    = errors.New("corrupt message")
 )
 
-func decodeMessage(rd *bufio.Reader) (string, error) {
+func DecodeMessage(rd *bufio.Reader) (string, error) {
 	header, err := rd.ReadString(':')
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -56,7 +56,7 @@ func decodeMessage(rd *bufio.Reader) (string, error) {
 	return string(buffer[:len(buffer)-2]), nil
 }
 
-func encodeMessage(msg string) []byte {
+func EncodeMessage(msg string) []byte {
 	ln := len(msg)
 
 	formattedMsg := fmt.Sprintf("%d:%s\r\n", ln, msg)

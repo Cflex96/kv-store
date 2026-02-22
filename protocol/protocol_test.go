@@ -1,4 +1,4 @@
-package main
+package protocol
 
 import (
 	"bufio"
@@ -47,7 +47,7 @@ func TestDecodeMessage(t *testing.T) {
 			}()
 
 			rd := bufio.NewReader(server)
-			resp, err := decodeMessage(rd)
+			resp, err := DecodeMessage(rd)
 			if test.isError {
 				assert.Error(t, err)
 			} else {
