@@ -3,24 +3,25 @@ package store
 import "sync"
 
 type MemoryStore struct {
-	store map[string]Type
+	store map[string]Value
 	mut   *sync.RWMutex
 }
 
 func New() *MemoryStore {
-	return &MemoryStore{make(map[string]Type), &sync.RWMutex{}}
+	return &MemoryStore{make(map[string]Value), &sync.RWMutex{}}
 }
 
-func (s *MemoryStore) Set(key string, value Type) {
+func (s *MemoryStore) Set(key string, value Value) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	s.store[key] = value
 }
 
-func (s *MemoryStore) Get(key string) Type {
+func (s *MemoryStore) Get(key string) (Value, bool) {
 	s.mut.RLock()
 	defer s.mut.RUnlock()
-	return s.store[key]
+	val, ok := s.store[key]
+	return val, ok
 }
 
 func (s *MemoryStore) Delete(key string) bool {

@@ -113,10 +113,10 @@ Response format follows the same `<length>:<payload>\r\n` framing.
 - [x] Implement `HashValue` — wraps a `map[string]string`
 - [x] Refactor `Store` from `map[string]string` to `map[string]Value`
 - [x] Refactor `Set()`/`Get()` — create/read `StringValue`
-- [ ] Add type guard helper: before executing a type-specific command, check `val.Type()` — return `-WRONGTYPE Operation against a key holding the wrong kind of value` on mismatch
-- [ ] Implement `LPush(key string, values ...string)` — create `ListValue` if key doesn't exist, prepend values
-- [ ] Implement `RPush(key string, values ...string)` — append values
-- [ ] Implement `LPop(key string)` / `RPop(key string)` — remove and return from head/tail
+- [x] Add type guard helper: before executing a type-specific command, check `val.Type()` — return `-WRONGTYPE Operation against a key holding the wrong kind of value` on mismatch
+- [x] Implement `LPush(key string, values ...string)` — create `ListValue` if key doesn't exist, prepend values
+- [x] Implement `RPush(key string, values ...string)` — append values
+- [x] Implement `LPop(key string)` / `RPop(key string)` — remove and return from head/tail
 - [ ] Implement `LRange(key string, start, stop int)` — return slice (support negative indexes)
 - [ ] Implement `LLen(key string)` — return list length
 - [ ] Implement `HSet(key, field, value string)` — create `HashValue` if key doesn't exist

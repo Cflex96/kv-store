@@ -128,7 +128,11 @@ func TestHandleMessage(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, dispatch.SuccessMsg, msg)
-			assert.Equal(t, val, store.Get(key).String())
+			storedVal, ok := store.Get(key)
+			if !ok {
+				assert.Fail(t, "store empty")
+			}
+			assert.Equal(t, val, storedVal.String())
 		})
 
 		t.Run("Test Get from storage", func(t *testing.T) {

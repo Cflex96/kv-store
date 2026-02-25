@@ -2,7 +2,13 @@ package store
 
 import "fmt"
 
-type Type interface {
+const (
+	ListType   = "list"
+	MapType    = "map"
+	StringType = "string"
+)
+
+type Value interface {
 	Type() string
 	String() string
 }
@@ -12,7 +18,7 @@ type StringValue struct {
 }
 
 func (v *StringValue) Type() string {
-	return "string"
+	return StringType
 }
 
 func (v *StringValue) String() string {
@@ -24,7 +30,7 @@ type ListValue struct {
 }
 
 func (v *ListValue) Type() string {
-	return "string"
+	return ListType
 }
 
 func (v *ListValue) String() string {
@@ -36,7 +42,7 @@ type MapValue struct {
 }
 
 func (v *MapValue) Type() string {
-	return "map"
+	return MapType
 }
 
 func (v *MapValue) String() string {
