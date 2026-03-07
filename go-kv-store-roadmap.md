@@ -50,7 +50,35 @@ Defenses:
 - **Read deadline** (e.g. 10s) — prevents stalled clients blocking a goroutine
 - **Close on framing error** — never attempt mid-stream recovery
 
-Response format follows the same `<length>:<payload>\r\n` framing.
+**Response format:**
+
+Simple response (strings, integers, errors):
+```
+<length>:<payload>\r\n
+```
+
+Array response (LRANGE, HGETALL, etc.):
+```
+*<count>\r\n
+<length>:<element1>\r\n
+<length>:<element2>\r\n
+...
+```
+
+- `*<count>` signals an array — client reads N simple messages after it
+- Each element uses the same `<length>:<payload>\r\n` framing
+- Supports values with spaces and arbitrary content since each element is length-prefixed
+
+Map response (HGETALL, etc.) — flat array with alternating key-value pairs:
+```
+*4\r\n
+6:field1\r\n
+6:value1\r\n
+6:field2\r\n
+6:value2\r\n
+```
+- Count is always even (2 × number of fields)
+- Client reads pairs: index 0 = key, index 1 = value, index 2 = key, etc.
 
 **Concurrency patterns unlocked:**
 - Goroutine-per-connection

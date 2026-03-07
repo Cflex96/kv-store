@@ -1,19 +1,19 @@
 package dispatch
 
 import (
+	"io"
 	"log"
-	"net"
 
 	"github.com/Cflex96/kv-store/protocol"
 	"github.com/Cflex96/kv-store/store"
 )
 
-func get(args []string, store *store.MemoryStore, conn net.Conn) error {
+func get(args []string, store *store.MemoryStore, writer io.Writer) error {
 	result, ok := store.Get(args[0])
 	if !ok {
 		return nil
 	}
-	_, err := conn.Write(protocol.EncodeMessage(result.String()))
+	_, err := writer.Write(protocol.EncodeString(result.String()))
 	if err != nil {
 		log.Printf("Server write error: %v", err)
 		return err
@@ -21,12 +21,12 @@ func get(args []string, store *store.MemoryStore, conn net.Conn) error {
 	return nil
 }
 
-func set(args []string, s *store.MemoryStore, conn net.Conn) error {
+func set(args []string, s *store.MemoryStore, writer io.Writer) error {
 	s.Set(args[0], &store.StringValue{
 		Value: args[1],
 	})
 
-	_, err := conn.Write(protocol.EncodeMessage(SuccessMsg))
+	_, err := writer.Write(protocol.EncodeString(SuccessMsg))
 	if err != nil {
 		log.Printf("Server write error: %v", err)
 		return err
@@ -34,12 +34,12 @@ func set(args []string, s *store.MemoryStore, conn net.Conn) error {
 	return nil
 }
 
-func del(args []string, store *store.MemoryStore, conn net.Conn) error {
+func del(args []string, store *store.MemoryStore, writer io.Writer) error {
 	var err error
 	if ok := store.Delete(args[0]); ok {
-		_, err = conn.Write(protocol.EncodeMessage(""))
+		_, err = writer.Write(protocol.EncodeString(""))
 	} else {
-		_, err = conn.Write(protocol.EncodeMessage(ErrNotFound.Error()))
+		_, err = writer.Write(protocol.EncodeString(ErrNotFound.Error()))
 	}
 	if err != nil {
 		log.Printf("Server write error: %v", err)

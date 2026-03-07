@@ -2,16 +2,18 @@ package dispatch
 
 import (
 	"bufio"
+	"bytes"
 	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/Cflex96/kv-store/client"
 	"github.com/Cflex96/kv-store/protocol"
 	"github.com/Cflex96/kv-store/store"
 )
 
-func TestLpush(t *testing.T) {
+func TestLPush(t *testing.T) {
 	s := store.New()
 	tests := []struct {
 		input              []string
@@ -106,7 +108,7 @@ func TestRpush(t *testing.T) {
 	}
 }
 
-func TestLpop(t *testing.T) {
+func TestLPop(t *testing.T) {
 	tests := []struct {
 		input              []string
 		store              *store.MemoryStore
@@ -165,7 +167,7 @@ func TestLpop(t *testing.T) {
 	}
 }
 
-func TestRpop(t *testing.T) {
+func TestRPop(t *testing.T) {
 	tests := []struct {
 		input              []string
 		store              *store.MemoryStore
@@ -220,6 +222,61 @@ func TestRpop(t *testing.T) {
 			}
 			storeValue := storeState.(*store.ListValue)
 			assert.Equal(t, tt.expectedStoreState.Value, storeValue.Value, "Expected Store State")
+		})
+	}
+}
+
+func TestLRange(t *testing.T) {
+	tests := []struct {
+		input           []string
+		description     string
+		inputStoreState []string
+		expectedResp    []string
+	}{
+		{
+			input:           []string{"key", "0", "2"},
+			description:     "Get List values from 0 to 2, values exist",
+			inputStoreState: []string{"val1", "val2", "val3"},
+			expectedResp:    []string{"val1", "val2", "val3"},
+		},
+		{
+			input:           []string{"key", "0", "-1"},
+			description:     "Get all values with 0 to -1",
+			inputStoreState: []string{"val1", "val2", "val3"},
+			expectedResp:    []string{"val1", "val2", "val3"},
+		},
+		{
+			input:           []string{"key", "5", "10"},
+			description:     "Non-existing index range",
+			inputStoreState: []string{"val1", "val2", "val3"},
+			expectedResp:    []string{},
+		},
+		{
+			input:           []string{"key", "10", "1"},
+			description:     "left index out of bounds",
+			inputStoreState: []string{"val1", "val2", "val3"},
+			expectedResp:    []string{},
+		},
+		{
+			input:           []string{"key", "0", "10"},
+			description:     "right index out of bound",
+			inputStoreState: []string{"val1", "val2", "val3"},
+			expectedResp:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			s := store.New()
+			s.Set(tt.input[0], &store.ListValue{Value: tt.inputStoreState})
+
+			var buf bytes.Buffer
+			err := lrange(tt.input, s, &buf)
+			assert.NoError(t, err)
+
+			val, err := client.HandleListResponse(bufio.NewReader(&buf))
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedResp, val.Value)
 		})
 	}
 }

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 
@@ -13,25 +14,27 @@ import (
 type Command string
 
 const (
-	GET   Command = "GET"
-	SET   Command = "SET"
-	DEL   Command = "DEL"
-	PING  Command = "PING"
-	LPUSH Command = "LPUSH"
-	RPUSH Command = "RPUSH"
-	LPOP  Command = "LPOP"
-	RPOP  Command = "RPOP"
+	GET    Command = "GET"
+	SET    Command = "SET"
+	DEL    Command = "DEL"
+	PING   Command = "PING"
+	LPUSH  Command = "LPUSH"
+	RPUSH  Command = "RPUSH"
+	LPOP   Command = "LPOP"
+	RPOP   Command = "RPOP"
+	LRANGE Command = "LRANGE"
 )
 
 var dispatch = map[Command]handler{
-	GET:   {1, 1, get},
-	SET:   {2, 2, set},
-	DEL:   {1, 1, del},
-	PING:  {0, 0, ping},
-	LPUSH: {2, -1, lpush},
-	RPUSH: {2, -1, rpush},
-	LPOP:  {1, 1, lpop},
-	RPOP:  {1, 1, rpop},
+	GET:    {1, 1, get},
+	SET:    {2, 2, set},
+	DEL:    {1, 1, del},
+	PING:   {0, 0, ping},
+	LPUSH:  {2, -1, lpush},
+	RPUSH:  {2, -1, rpush},
+	LPOP:   {1, 1, lpop},
+	RPOP:   {1, 1, rpop},
+	LRANGE: {3, 3, lrange},
 }
 
 var (
@@ -46,7 +49,7 @@ const SuccessMsg string = "OK"
 type handler struct {
 	minArgs int
 	maxArgs int
-	fn      func(args []string, store *store.MemoryStore, conn net.Conn) error
+	fn      func(args []string, store *store.MemoryStore, writer io.Writer) error
 }
 
 type Dispatcher struct {
@@ -64,12 +67,12 @@ func NewDispatcher(store *store.MemoryStore) Dispatcher {
 func (d Dispatcher) Dispatch(args []string, conn net.Conn, cmd Command) error {
 	handler, ok := d.dispatchTable[cmd]
 	if !ok {
-		conn.Write(protocol.EncodeMessage(ErrInvalidCmd.Error()))
+		conn.Write(protocol.EncodeString(ErrInvalidCmd.Error()))
 		return ErrInvalidCmd
 	}
 	if len(args) < handler.minArgs || (len(args) > handler.maxArgs && handler.maxArgs != -1) {
 		conn.Write(
-			protocol.EncodeMessage(
+			protocol.EncodeString(
 				fmt.Errorf("%w: %s takes %d to %d args, got %d", ErrWrongArgs, string(cmd), handler.minArgs, handler.maxArgs, len(args)).
 					Error(),
 			),
@@ -83,15 +86,29 @@ func (d Dispatcher) Dispatch(args []string, conn net.Conn, cmd Command) error {
 	return nil
 }
 
-func writeResponse(msg string, conn net.Conn) error {
-	if _, err := conn.Write(protocol.EncodeMessage(msg)); err != nil {
+func writeStringResponse(msg string, writer io.Writer) error {
+	if _, err := writer.Write(protocol.EncodeString(msg)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func ping(args []string, store *store.MemoryStore, conn net.Conn) error {
-	_, err := conn.Write(protocol.EncodeMessage("PONG"))
+func writeListResponse(msg []string, writer io.Writer) error {
+	if _, err := writer.Write(protocol.EncodeList(msg)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeMapResponse(msg map[string]string, writer io.Writer) error {
+	if _, err := writer.Write(protocol.EncodeMap(msg)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ping(args []string, store *store.MemoryStore, writer io.Writer) error {
+	_, err := writer.Write(protocol.EncodeString("PONG"))
 	if err != nil {
 		log.Printf("Server write error: %v", err)
 		return err

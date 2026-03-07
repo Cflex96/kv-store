@@ -104,7 +104,7 @@ func TestHandleMessage(t *testing.T) {
 		results := make([]string, 5)
 
 		for i := range 5 {
-			go client.Write(protocol.EncodeMessage("PING"))
+			go client.Write(protocol.EncodeString("PING"))
 
 			go handleMessage(server, serverReader, d)
 			res, err := protocol.DecodeMessage(clientReader)
@@ -180,7 +180,7 @@ func arrangeAndActOnMapMutationTest(msg string, d dispatch.Dispatcher) (string, 
 	serverRd := bufio.NewReader(server)
 	clientRd := bufio.NewReader(client)
 
-	go client.Write(protocol.EncodeMessage(msg))
+	go client.Write(protocol.EncodeString(msg))
 
 	go handleMessage(server, serverRd, d)
 

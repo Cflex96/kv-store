@@ -2,14 +2,15 @@ package protocol
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"strconv"
 )
 
-// 64kB
-const maxMessageSize int = 16000
+// MaxMessageSize 64kb
+const MaxMessageSize int = 16000
 
 var (
 	ErrMissingHeader = errors.New("missing header")
@@ -19,30 +20,9 @@ var (
 )
 
 func DecodeMessage(rd *bufio.Reader) (string, error) {
-	header, err := rd.ReadString(':')
+	messageSize, err := GetMessageSize(rd)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return "", io.EOF
-		} else {
-			return "", fmt.Errorf("%w: %w", ErrMissingHeader, err)
-		}
-	}
-
-	messageSize, err := strconv.Atoi(header[:len(header)-1])
-	if err != nil {
-		return "", fmt.Errorf(
-			"%w: could not parse %q as int",
-			ErrInvalidHeader,
-			header[:len(header)-1],
-		)
-	}
-	if messageSize > maxMessageSize {
-		return "", fmt.Errorf(
-			"%w: %d bytes exceeds %d limit",
-			ErrMessageTooBig,
-			messageSize,
-			maxMessageSize,
-		)
+		return "", err
 	}
 
 	// +2 to account for "\r\n"
@@ -56,9 +36,59 @@ func DecodeMessage(rd *bufio.Reader) (string, error) {
 	return string(buffer[:len(buffer)-2]), nil
 }
 
-func EncodeMessage(msg string) []byte {
+func EncodeString(msg string) []byte {
 	ln := len(msg)
 
 	formattedMsg := fmt.Sprintf("%d:%s\r\n", ln, msg)
 	return []byte(formattedMsg)
+}
+
+func EncodeList(items []string) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte('*')
+	fmt.Fprintf(&buf, "%d:", len(items))
+	for _, item := range items {
+		buf.Write(EncodeString(item))
+	}
+	return buf.Bytes()
+}
+
+func EncodeMap(msg map[string]string) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte('%')
+	fmt.Fprintf(&buf, "%d:", len(msg))
+	for k, v := range msg {
+		buf.Write(EncodeString(k))
+		buf.Write(EncodeString(v))
+	}
+	return buf.Bytes()
+}
+
+func GetMessageSize(rd *bufio.Reader) (int, error) {
+	header, err := rd.ReadString(':')
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return 0, io.EOF
+		} else {
+			return 0, fmt.Errorf("%w: %w", ErrMissingHeader, err)
+		}
+	}
+
+	messageSize, err := strconv.Atoi(header[:len(header)-1])
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%w: could not parse %q as int",
+			ErrInvalidHeader,
+			header[:len(header)-1],
+		)
+	}
+	if messageSize > MaxMessageSize {
+		return 0, fmt.Errorf(
+			"%w: %d bytes exceeds %d limit",
+			ErrMessageTooBig,
+			messageSize,
+			MaxMessageSize,
+		)
+	}
+	return messageSize, nil
 }
