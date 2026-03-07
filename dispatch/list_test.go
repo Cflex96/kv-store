@@ -139,6 +139,17 @@ func TestLPop(t *testing.T) {
 			},
 			description: "LPOP on existing key",
 		},
+		{
+			input: []string{"key"},
+			store: func() *store.MemoryStore {
+				s := store.New()
+				s.Set("key", &store.ListValue{Value: []string{"value1"}})
+				return s
+			}(),
+			expectedResp:       "value1",
+			expectedStoreState: nil,
+			description:        "LPOP removes key when last element is popped",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
@@ -198,6 +209,17 @@ func TestRPop(t *testing.T) {
 			},
 			description: "RPOP on existing key",
 		},
+		{
+			input: []string{"key"},
+			store: func() *store.MemoryStore {
+				s := store.New()
+				s.Set("key", &store.ListValue{Value: []string{"value1"}})
+				return s
+			}(),
+			expectedResp:       "value1",
+			expectedStoreState: nil,
+			description:        "RPOP removes key when last element is popped",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
@@ -229,36 +251,42 @@ func TestRPop(t *testing.T) {
 func TestLRange(t *testing.T) {
 	tests := []struct {
 		input           []string
+		key             string
 		description     string
 		inputStoreState []string
 		expectedResp    []string
 	}{
 		{
 			input:           []string{"key", "0", "2"},
+			key:             "key",
 			description:     "Get List values from 0 to 2, values exist",
 			inputStoreState: []string{"val1", "val2", "val3"},
 			expectedResp:    []string{"val1", "val2", "val3"},
 		},
 		{
 			input:           []string{"key", "0", "-1"},
+			key:             "key",
 			description:     "Get all values with 0 to -1",
 			inputStoreState: []string{"val1", "val2", "val3"},
 			expectedResp:    []string{"val1", "val2", "val3"},
 		},
 		{
 			input:           []string{"key", "5", "10"},
+			key:             "key",
 			description:     "Non-existing index range",
 			inputStoreState: []string{"val1", "val2", "val3"},
 			expectedResp:    []string{},
 		},
 		{
 			input:           []string{"key", "10", "1"},
+			key:             "key",
 			description:     "left index out of bounds",
 			inputStoreState: []string{"val1", "val2", "val3"},
 			expectedResp:    []string{},
 		},
 		{
 			input:           []string{"key", "0", "10"},
+			key:             "key",
 			description:     "right index out of bound",
 			inputStoreState: []string{"val1", "val2", "val3"},
 			expectedResp:    []string{},
@@ -268,13 +296,52 @@ func TestLRange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			s := store.New()
-			s.Set(tt.input[0], &store.ListValue{Value: tt.inputStoreState})
+			s.Set(tt.key, &store.ListValue{Value: tt.inputStoreState})
 
 			var buf bytes.Buffer
 			err := lrange(tt.input, s, &buf)
 			assert.NoError(t, err)
 
 			val, err := client.HandleListResponse(bufio.NewReader(&buf))
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedResp, val.Value)
+		})
+	}
+}
+
+// maybe test in future: create list len 1, pop, and then get length. Will the key persist? will it get cleaned up?
+func TestLlen(t *testing.T) {
+	tests := []struct {
+		input           []string
+		description     string
+		inputStoreState []string
+		expectedResp    string
+	}{
+		{
+			input:           []string{"key"},
+			description:     "get len of valid key",
+			inputStoreState: []string{"key", "0"},
+			expectedResp:    "1",
+		},
+		{
+			input:           []string{"nokey"},
+			description:     "get len of invalid key",
+			inputStoreState: []string{"key", "0"},
+			expectedResp:    "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			s := store.New()
+			s.Set(tt.inputStoreState[0], &store.ListValue{Value: tt.inputStoreState[1:]})
+
+			var buf bytes.Buffer
+
+			err := llen(tt.input, s, &buf)
+			assert.NoError(t, err)
+
+			val, err := client.HandleStringResponse(bufio.NewReader(&buf))
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedResp, val.Value)
 		})

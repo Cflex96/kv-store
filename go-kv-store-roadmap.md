@@ -145,8 +145,8 @@ Map response (HGETALL, etc.) — flat array with alternating key-value pairs:
 - [x] Implement `LPush(key string, values ...string)` — create `ListValue` if key doesn't exist, prepend values
 - [x] Implement `RPush(key string, values ...string)` — append values
 - [x] Implement `LPop(key string)` / `RPop(key string)` — remove and return from head/tail
-- [ ] Implement `LRange(key string, start, stop int)` — return slice (support negative indexes)
-- [ ] Implement `LLen(key string)` — return list length
+- [x] Implement `LRange(key string, start, stop int)` — return slice (support negative indexes)
+- [x] Implement `LLen(key string)` — return list length
 - [ ] Implement `HSet(key, field, value string)` — create `HashValue` if key doesn't exist
 - [ ] Implement `HGet(key, field string)` — return field value
 - [ ] Implement `HDel(key, field string)` — remove field

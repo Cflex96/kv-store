@@ -23,6 +23,7 @@ const (
 	LPOP   Command = "LPOP"
 	RPOP   Command = "RPOP"
 	LRANGE Command = "LRANGE"
+	LLEN   Command = "LLEN"
 )
 
 var dispatch = map[Command]handler{
@@ -35,6 +36,7 @@ var dispatch = map[Command]handler{
 	LPOP:   {1, 1, lpop},
 	RPOP:   {1, 1, rpop},
 	LRANGE: {3, 3, lrange},
+	LLEN:   {1, 1, llen},
 }
 
 var (

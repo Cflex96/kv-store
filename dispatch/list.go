@@ -53,11 +53,15 @@ func lpop(args []string, s *store.MemoryStore, writer io.Writer) error {
 	if !ok {
 		return writeStringResponse(ErrInvalidType.Error(), writer)
 	}
-
-	deletedValue := list.Value[0]
-	list.Value = list.Value[1:]
-	s.Set(args[0], list)
-	return writeStringResponse(deletedValue, writer)
+	if len(list.Value) == 1 {
+		s.Delete(args[0])
+		return writeStringResponse(list.Value[0], writer)
+	} else {
+		deletedValue := list.Value[0]
+		list.Value = list.Value[1:]
+		s.Set(args[0], list)
+		return writeStringResponse(deletedValue, writer)
+	}
 }
 
 func rpop(args []string, s *store.MemoryStore, writer io.Writer) error {
@@ -70,10 +74,15 @@ func rpop(args []string, s *store.MemoryStore, writer io.Writer) error {
 		return writeStringResponse(ErrInvalidType.Error(), writer)
 	}
 
-	deletedValue := list.Value[len(list.Value)-1]
-	list.Value = list.Value[:len(list.Value)-1]
-	s.Set(args[0], list)
-	return writeStringResponse(deletedValue, writer)
+	if len(list.Value) == 1 {
+		s.Delete(args[0])
+		return writeStringResponse(list.Value[0], writer)
+	} else {
+		deletedValue := list.Value[len(list.Value)-1]
+		list.Value = list.Value[:len(list.Value)-1]
+		s.Set(args[0], list)
+		return writeStringResponse(deletedValue, writer)
+	}
 }
 
 func lrange(args []string, s *store.MemoryStore, writer io.Writer) error {
@@ -113,6 +122,19 @@ func lrange(args []string, s *store.MemoryStore, writer io.Writer) error {
 	}
 
 	return writeListResponse(list.Value[leftLimit:rightLimit], writer)
+}
+
+func llen(args []string, s *store.MemoryStore, writer io.Writer) error {
+	val, ok := s.Get(args[0])
+	if !ok {
+		return writeStringResponse("0", writer)
+	}
+	list, ok := val.(*store.ListValue)
+	if !ok {
+		return writeStringResponse(ErrInvalidType.Error(), writer)
+	}
+
+	return writeStringResponse(strconv.Itoa(len(list.Value)), writer)
 }
 
 func getOrCreateListValue(key string, s *store.MemoryStore) (*store.ListValue, error) {
