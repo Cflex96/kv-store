@@ -147,12 +147,12 @@ Map response (HGETALL, etc.) — flat array with alternating key-value pairs:
 - [x] Implement `LPop(key string)` / `RPop(key string)` — remove and return from head/tail
 - [x] Implement `LRange(key string, start, stop int)` — return slice (support negative indexes)
 - [x] Implement `LLen(key string)` — return list length
-- [ ] Implement `HSet(key, field, value string)` — create `HashValue` if key doesn't exist
+- [x] Implement `HSet(key, field, value string)` — create `HashValue` if key doesn't exist
 - [ ] Implement `HGet(key, field string)` — return field value
 - [ ] Implement `HDel(key, field string)` — remove field
 - [ ] Implement `HGetAll(key string)` — return all field-value pairs
-- [ ] Extend protocol parser to handle new commands
-- [ ] Auto-delete: if `LPop`/`RPop` empties a list or `HDel` removes the last field, delete the key entirely (Redis behavior)
+- [x] Extend protocol parser to handle new commands
+- [x] Auto-delete: if `LPop`/`RPop` empties a list or `HDel` removes the last field, delete the key entirely (Redis behavior)
 - [ ] Test: SET then LPUSH on same key returns WRONGTYPE
 - [ ] Test: LPUSH/RPUSH/LRANGE with positive and negative indexes
 - [ ] Test: HSET/HGET/HDEL/HGETALL round-trip
